@@ -95,13 +95,12 @@ def encode_windows(model, windows: torch.Tensor) -> np.ndarray:
     windows: (B, NUM_FRAMES, 3, RES, RES) already normalized, on device.
     Returns: (B, FEAT_DIM) mean-pooled token features as float32 numpy.
 
-    The V-JEPA 2.1 encoder returns all patch tokens (B, num_tokens, embed_dim)
-    when built with return_all_tokens=True; we mean-pool over the token axis.
+    The V-JEPA 2.1 torch.hub encoder's patch_embed is a Conv3d expecting input in
+    (B, C, T, H, W) order, so we transpose frames<->channels before the forward.
+    It returns all patch tokens (B, num_tokens, embed_dim); we mean-pool tokens.
     """
-    if hasattr(model, "get_vision_features"):
-        tokens = model.get_vision_features(windows)
-    else:
-        tokens = model(windows)
+    x = windows.transpose(1, 2)   # (B, NUM_FRAMES, 3, H, W) -> (B, 3, NUM_FRAMES, H, W)
+    tokens = model(x)
     if isinstance(tokens, (tuple, list)):
         tokens = tokens[0]
     tokens = getattr(tokens, "last_hidden_state", tokens)
