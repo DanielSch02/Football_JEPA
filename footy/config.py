@@ -30,16 +30,28 @@ def default_data_dir() -> str:
     """
     Resolve the SoccerNet data directory.
 
-    On Kaggle the attached '3-matches' dataset is read-only at
-    /kaggle/input/3-matches; we set SOCCERNET_DIR there in the notebook.
-    Locally it falls back to ./data/soccernet.
+    Resolution order:
+      1. SOCCERNET_DIR env var (explicit override),
+      2. the first Kaggle input mount that contains the expected game folders
+         (handles arbitrary dataset nesting like
+         /kaggle/input/datasets/<user>/<slug>/soccernet/england_epl/...),
+      3. local ./data/soccernet.
     """
     env = os.environ.get("SOCCERNET_DIR")
     if env:
         return env
-    kaggle_input = Path("/kaggle/input/3-matches")
+
+    # Auto-detect under /kaggle/input by locating a Labels-v2.json whose path ends
+    # with the known game-relative path, then strip that suffix to get data_dir.
+    probe = VJEPA_GAME_PATHS[0]                 # e.g. england_epl/2014-2015/<game>
+    suffix = Path(probe) / "Labels-v2.json"
+    n_strip = len(suffix.parts)                 # parts to drop from the matched file path
+    kaggle_input = Path("/kaggle/input")
     if kaggle_input.exists():
-        return str(kaggle_input)
+        for labels in kaggle_input.rglob("Labels-v2.json"):
+            if labels.parts[-n_strip:] == suffix.parts:
+                return str(Path(*labels.parts[:-n_strip]))
+
     return "./data/soccernet"
 
 
