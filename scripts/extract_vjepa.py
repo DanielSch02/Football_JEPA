@@ -66,8 +66,14 @@ def load_encoder(device: torch.device):
     """
     import sys
 
-    # Download (or reuse cached) repo source; returns the local repo dir.
-    repo_dir = torch.hub._get_cache_or_reload(HUB_REPO, force_reload=False, trust_repo=True)
+    # Ensure the repo source is cached. torch.hub.list() downloads the repo (if
+    # needed) and runs no entrypoint — avoiding the private _get_cache_or_reload
+    # whose signature varies across torch versions.
+    owner_repo = HUB_REPO.split("/")
+    repo_dir = Path(torch.hub.get_dir()) / f"{owner_repo[0]}_{owner_repo[1]}_main"
+    if not (repo_dir / "src" / "hub" / "backbones.py").exists():
+        torch.hub.list(HUB_REPO, force_reload=False, trust_repo=True)
+
     if str(repo_dir) not in sys.path:
         sys.path.insert(0, str(repo_dir))
 
