@@ -46,13 +46,41 @@ IMAGENET_MEAN = torch.tensor([0.485, 0.456, 0.406]).view(1, 3, 1, 1)
 IMAGENET_STD = torch.tensor([0.229, 0.224, 0.225]).view(1, 3, 1, 1)
 
 
+# Real Meta CDN for the pretrained weights. The vjepa2 repo's backbones.py ships
+# with a testing override (`VJEPA_BASE_URL = "http://localhost:8300"`) that clobbers
+# the real URL, so torch.hub.load fails with ConnectionRefused. We patch it back.
+VJEPA_CDN = "https://dl.fbaipublicfiles.com/vjepa2"
+
+
 # ── Model ─────────────────────────────────────────────────────────────────────
 
 def load_encoder(device: torch.device):
-    """Load the V-JEPA 2.1 ViT-L encoder from torch.hub."""
-    model = torch.hub.load(HUB_REPO, HUB_MODEL)
-    model = model.to(device).eval()
-    return model
+    """
+    Load the V-JEPA 2.1 ViT-L encoder.
+
+    We download/cache the vjepa2 repo source, import its backbones module, patch
+    the broken `VJEPA_BASE_URL = "http://localhost:8300"` testing placeholder back
+    to the real Meta CDN, then call the entrypoint *directly from that module* so
+    the patch is guaranteed to be in effect. The entrypoint returns an
+    (encoder, predictor) tuple; we keep only the encoder.
+    """
+    import sys
+
+    # Download (or reuse cached) repo source; returns the local repo dir.
+    repo_dir = torch.hub._get_cache_or_reload(HUB_REPO, force_reload=False, trust_repo=True)
+    if str(repo_dir) not in sys.path:
+        sys.path.insert(0, str(repo_dir))
+
+    import src.hub.backbones as backbones  # the vjepa2 repo's own 'src' package
+
+    if str(getattr(backbones, "VJEPA_BASE_URL", "")).startswith("http://localhost"):
+        print(f"    patching VJEPA_BASE_URL -> {VJEPA_CDN}")
+        backbones.VJEPA_BASE_URL = VJEPA_CDN
+
+    entry = getattr(backbones, HUB_MODEL)
+    out = entry(pretrained=True)
+    encoder = out[0] if isinstance(out, (tuple, list)) else out
+    return encoder.to(device).eval()
 
 
 @torch.no_grad()
@@ -60,19 +88,22 @@ def encode_windows(model, windows: torch.Tensor) -> np.ndarray:
     """
     windows: (B, NUM_FRAMES, 3, RES, RES) already normalized, on device.
     Returns: (B, FEAT_DIM) mean-pooled token features as float32 numpy.
+
+    The V-JEPA 2.1 encoder returns all patch tokens (B, num_tokens, embed_dim)
+    when built with return_all_tokens=True; we mean-pool over the token axis.
     """
-    # Prefer the documented feature accessor; fall back to forward().last_hidden_state.
     if hasattr(model, "get_vision_features"):
         tokens = model.get_vision_features(windows)
     else:
-        out = model(windows)
-        tokens = getattr(out, "last_hidden_state", out)
+        tokens = model(windows)
+    if isinstance(tokens, (tuple, list)):
+        tokens = tokens[0]
+    tokens = getattr(tokens, "last_hidden_state", tokens)
 
-    # tokens: (B, num_tokens, FEAT_DIM) -> mean-pool over the token axis.
     if tokens.dim() == 3:
-        feats = tokens.mean(dim=1)
+        feats = tokens.mean(dim=1)        # (B, embed_dim)
     elif tokens.dim() == 2:
-        feats = tokens  # already pooled
+        feats = tokens
     else:
         raise RuntimeError(f"Unexpected encoder output shape: {tuple(tokens.shape)}")
     return feats.float().cpu().numpy()
