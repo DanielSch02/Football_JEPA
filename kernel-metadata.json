@@ -1,13 +1,13 @@
 {
-  "id": "daniels02/my-awesome-kernel",
-  "title": "My Awesome Kernel",
+  "id": "daniels02/football-jepa",
+  "title": "Football JEPA",
   "code_file": "football_jepa.ipynb",
   "language": "python",
   "kernel_type": "notebook",
   "is_private": true,
-  "enable_gpu": false,
-  "enable_internet": false,
-  "dataset_sources": [],
+  "enable_gpu": true,
+  "enable_internet": true,
+  "dataset_sources": ["daniels02/3-matches"],
   "competition_sources": [],
   "enable_tpu": false
 }

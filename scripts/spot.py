@@ -17,12 +17,18 @@ from scipy.signal import find_peaks
 
 from src.dataset import (
     CLIP_LEN, HALF_CLIP, FPS, EVENT_LABELS, NUM_CLASSES,
-    LABEL_TO_IDX, load_half, _extract_clip,
+    LABEL_TO_IDX, FEATURE_DIMS, load_half, _extract_clip,
 )
 from src.probe import AttentiveProbe
 
 RESULTS_DIR = Path("results")
-CHECKPOINT  = RESULTS_DIR / "probe.pt"
+
+
+def checkpoint_path(feature_tag: str) -> Path:
+    """Mirror scripts/train.py: ResNET_TF2 -> probe.pt; other tags -> probe_<tag>.pt."""
+    if feature_tag == "ResNET_TF2":
+        return RESULTS_DIR / "probe.pt"
+    return RESULTS_DIR / f"probe_{feature_tag}.pt"
 
 
 # ── Sliding window inference ──────────────────────────────────────────────────
@@ -152,8 +158,9 @@ def evaluate_spotting(
     half: int,
     device: torch.device,
     tolerances_sec: tuple[int, ...] = (5, 10, 30, 60),
+    feature_tag: str = "ResNET_TF2",
 ) -> dict:
-    features, events = load_half(data_dir, game, half)
+    features, events = load_half(data_dir, game, half, feature_tag)
     scores = score_half(model, features, device)
 
     results = {}
@@ -215,20 +222,23 @@ if __name__ == "__main__":
     parser.add_argument("--half",     type=int, default=1)
     parser.add_argument("--query",    default="Corner",
                         help="Event class to demo-query")
+    parser.add_argument("--feature_tag", default="ResNET_TF2", choices=list(FEATURE_DIMS),
+                        help="Feature backend: ResNET_TF2 (baseline) or VJEPA21_L")
     args = parser.parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    if not CHECKPOINT.exists():
-        print(f"No checkpoint found at {CHECKPOINT}. Run train.py first.")
+    checkpoint = checkpoint_path(args.feature_tag)
+    if not checkpoint.exists():
+        print(f"No checkpoint found at {checkpoint}. Run train.py --feature_tag {args.feature_tag} first.")
         exit(1)
 
-    model = AttentiveProbe().to(device)
-    model.load_state_dict(torch.load(CHECKPOINT, map_location=device))
-    print(f"Loaded checkpoint from {CHECKPOINT}")
+    model = AttentiveProbe(feat_dim=FEATURE_DIMS[args.feature_tag]).to(device)
+    model.load_state_dict(torch.load(checkpoint, map_location=device))
+    print(f"Loaded checkpoint from {checkpoint}  (feature_tag={args.feature_tag})")
 
     results, scores, events = evaluate_spotting(
-        model, args.data_dir, args.game, args.half, device
+        model, args.data_dir, args.game, args.half, device, feature_tag=args.feature_tag
     )
     print_spotting_results(results, args.game, args.half)
     demo_query(scores, events, args.query)

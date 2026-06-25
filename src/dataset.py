@@ -31,6 +31,16 @@ CLIP_LEN = 30          # frames; 30 frames × 0.5 s = 15 s of context per clip
 HALF_CLIP = CLIP_LEN // 2
 MIN_NEG_DIST = CLIP_LEN  # minimum distance from any event to call it background
 
+# Feature backends. Each tag maps to its precomputed .npy filename suffix and its
+# per-frame feature dimension. The probe's feat_dim must match the chosen tag.
+#   ResNET_TF2 : SoccerNet's precomputed ResNet features (the baseline).
+#   VJEPA21_L  : V-JEPA 2.1 ViT-L features produced by scripts/extract_vjepa.py.
+DEFAULT_FEATURE_TAG = "ResNET_TF2"
+FEATURE_DIMS = {
+    "ResNET_TF2": 2048,
+    "VJEPA21_L": 1024,
+}
+
 # All 17 SoccerNet v2 event labels (discovered from the full label taxonomy).
 # Background is class 0; events are 1-17.
 BACKGROUND = "Background"
@@ -78,6 +88,7 @@ def load_half(
     data_dir: str,
     game: str,
     half: int,
+    feature_tag: str = DEFAULT_FEATURE_TAG,
 ) -> tuple[np.ndarray, list[dict]]:
     """
     Returns:
@@ -85,7 +96,7 @@ def load_half(
         events:   list of dicts with keys 'frame' and 'label_idx'
     """
     game_path = Path(data_dir) / game
-    feat_path = game_path / f"{half}_ResNET_TF2.npy"
+    feat_path = game_path / f"{half}_{feature_tag}.npy"
     label_path = game_path / "Labels-v2.json"
 
     features = np.load(feat_path).astype(np.float32)
@@ -159,10 +170,12 @@ class SoccerNetClipDataset(Dataset):
         games: Optional[list[str]] = None,
         neg_ratio: float = 1.0,        # background samples per event sample
         seed: int = 42,
+        feature_tag: str = DEFAULT_FEATURE_TAG,
     ):
         from SoccerNet.utils import getListGames
 
         self.data_dir = data_dir
+        self.feature_tag = feature_tag
         self.rng = random.Random(seed)
         self.samples: list[tuple[np.ndarray, int]] = []  # (clip, label_idx)
 
@@ -172,13 +185,13 @@ class SoccerNetClipDataset(Dataset):
         missing = 0
         for game in games:
             for half in (1, 2):
-                feat_path = Path(data_dir) / game / f"{half}_ResNET_TF2.npy"
+                feat_path = Path(data_dir) / game / f"{half}_{feature_tag}.npy"
                 label_path = Path(data_dir) / game / "Labels-v2.json"
                 if not feat_path.exists() or not label_path.exists():
                     missing += 1
                     continue
 
-                features, events = load_half(data_dir, game, half)
+                features, events = load_half(data_dir, game, half, feature_tag)
 
                 # Positive samples — one clip per annotation
                 for ev in events:

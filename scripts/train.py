@@ -17,21 +17,34 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 from sklearn.metrics import confusion_matrix
 
-from src.dataset import SoccerNetClipDataset, EVENT_LABELS, NUM_CLASSES
+from src.dataset import SoccerNetClipDataset, EVENT_LABELS, NUM_CLASSES, FEATURE_DIMS
 from src.probe import AttentiveProbe
 
 RESULTS_DIR = Path("results")
 RESULTS_DIR.mkdir(exist_ok=True)
 
 
+def checkpoint_path(feature_tag: str) -> Path:
+    """ResNET_TF2 -> results/probe.pt (baseline); other tags -> results/probe_<tag>.pt."""
+    if feature_tag == "ResNET_TF2":
+        return RESULTS_DIR / "probe.pt"
+    return RESULTS_DIR / f"probe_{feature_tag}.pt"
+
+
 def train(args):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Device: {device}")
 
+    feat_dim = FEATURE_DIMS[args.feature_tag]
+    ckpt_path = checkpoint_path(args.feature_tag)
+    print(f"Feature backend: {args.feature_tag} (feat_dim={feat_dim})  ->  {ckpt_path}")
+
     # ── Datasets ──────────────────────────────────────────────────────────────
     print("Building datasets...")
-    train_ds = SoccerNetClipDataset(args.data_dir, split="train", games=args.games)
-    val_ds   = SoccerNetClipDataset(args.data_dir, split="valid", games=args.games)
+    train_ds = SoccerNetClipDataset(args.data_dir, split="train", games=args.games,
+                                    feature_tag=args.feature_tag)
+    val_ds   = SoccerNetClipDataset(args.data_dir, split="valid", games=args.games,
+                                    feature_tag=args.feature_tag)
 
     print(f"Train samples: {len(train_ds)}  Val samples: {len(val_ds)}")
     print("\nTrain class distribution:")
@@ -43,7 +56,7 @@ def train(args):
     val_loader   = DataLoader(val_ds,   batch_size=args.batch_size, shuffle=False, num_workers=0)
 
     # ── Model ─────────────────────────────────────────────────────────────────
-    model = AttentiveProbe().to(device)
+    model = AttentiveProbe(feat_dim=feat_dim).to(device)
     total_params = sum(p.numel() for p in model.parameters())
     print(f"\nModel parameters: {total_params:,}")
 
@@ -92,12 +105,12 @@ def train(args):
 
         if val_acc > best_val_acc:
             best_val_acc = val_acc
-            torch.save(model.state_dict(), RESULTS_DIR / "probe.pt")
+            torch.save(model.state_dict(), ckpt_path)
 
     # ── Final evaluation ──────────────────────────────────────────────────────
     print(f"\nBest val accuracy: {best_val_acc:.3f}")
     print("Loading best checkpoint for final evaluation...")
-    model.load_state_dict(torch.load(RESULTS_DIR / "probe.pt", map_location=device))
+    model.load_state_dict(torch.load(ckpt_path, map_location=device))
 
     all_preds, all_labels = predict_all(model, val_loader, device)
     print_per_class_accuracy(all_preds, all_labels)
@@ -184,5 +197,7 @@ if __name__ == "__main__":
     parser.add_argument("--epochs",   type=int,   default=30)
     parser.add_argument("--batch_size", type=int, default=64)
     parser.add_argument("--lr",       type=float, default=1e-3)
+    parser.add_argument("--feature_tag", default="ResNET_TF2", choices=list(FEATURE_DIMS),
+                        help="Feature backend: ResNET_TF2 (baseline) or VJEPA21_L")
     args = parser.parse_args()
     train(args)
