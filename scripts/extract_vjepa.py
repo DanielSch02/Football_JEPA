@@ -135,23 +135,16 @@ def _open_decoder(video_path: Path):
         return ("decord", vr), n, fps
 
 
-def _get_window_frames(decoder, center_vframe: int, total_frames: int) -> torch.Tensor:
-    """
-    Fetch NUM_FRAMES raw frames centered on center_vframe, clamped to [0, total_frames).
-    Returns uint8/float tensor (NUM_FRAMES, 3, H, W).
-    """
-    half = NUM_FRAMES // 2
-    idxs = [min(max(center_vframe - half + k, 0), total_frames - 1) for k in range(NUM_FRAMES)]
-
+def _get_frames_at(decoder, idxs: list[int]) -> torch.Tensor:
+    """Fetch the given video-frame indices. Returns (len(idxs), 3, H, W)."""
     kind, dec = decoder
     if kind == "torchcodec":
-        frames = dec.get_frames_at(indices=idxs).data  # (T, C, H, W)
-        return frames
+        return dec.get_frames_at(indices=idxs).data  # (N, C, H, W)
     else:  # decord
         import torch as _t
 
-        arr = dec.get_batch(idxs).asnumpy()  # (T, H, W, C)
-        return _t.from_numpy(arr).permute(0, 3, 1, 2)  # (T, C, H, W)
+        arr = dec.get_batch(idxs).asnumpy()  # (N, H, W, C)
+        return _t.from_numpy(arr).permute(0, 3, 1, 2)  # (N, C, H, W)
 
 
 def _preprocess(frames: torch.Tensor, device: torch.device) -> torch.Tensor:
@@ -180,6 +173,12 @@ def expected_T(game_dir: Path, half: int) -> int | None:
 
 
 def extract_half(model, game_dir: Path, half: int, device: torch.device, batch: int) -> np.ndarray:
+    """
+    Tiled extraction: split the half into non-overlapping NUM_FRAMES-frame clips
+    (one clip ≈ NUM_FRAMES/FPS seconds). Run the encoder once per clip and
+    broadcast each clip's pooled vector to the SoccerNet frame-rows it covers.
+    This does ~NUM_FRAMES× fewer forward passes than one window per frame.
+    """
     video_path = game_dir / f"{half}_224p.mkv"
     if not video_path.exists():
         raise FileNotFoundError(video_path)
@@ -188,35 +187,45 @@ def extract_half(model, game_dir: Path, half: int, device: torch.device, batch: 
 
     T = expected_T(game_dir, half)
     if T is None:
-        # No ResNet reference; derive T from video duration at 2 fps.
         T = int(total_frames / video_fps * FPS)
-    print(f"    half {half}: video {total_frames} frames @ {video_fps:.2f} fps -> T={T}")
+
+    # Non-overlapping clips over the T SoccerNet frames.
+    clip_starts = list(range(0, T, NUM_FRAMES))
+    print(f"    half {half}: video {total_frames} frames @ {video_fps:.2f} fps "
+          f"-> T={T}, {len(clip_starts)} clips of {NUM_FRAMES}")
 
     feats = np.zeros((T, FEAT_DIM), dtype=np.float32)
 
-    pending_idx: list[int] = []
+    pending_starts: list[int] = []
     pending_clips: list[torch.Tensor] = []
 
     def flush():
         if not pending_clips:
             return
         windows = torch.stack(pending_clips, dim=0)  # (B, NUM_FRAMES, 3, RES, RES)
-        out = encode_windows(model, windows)
-        for i, vec in zip(pending_idx, out):
-            feats[i] = vec
-        pending_idx.clear()
+        out = encode_windows(model, windows)         # (B, FEAT_DIM)
+        for start, vec in zip(pending_starts, out):
+            end = min(start + NUM_FRAMES, T)
+            feats[start:end] = vec                   # broadcast to the rows this clip covers
+        pending_starts.clear()
         pending_clips.clear()
 
-    for i in range(T):
-        center_vframe = round(i / FPS * video_fps)
-        frames = _get_window_frames(decoder, center_vframe, total_frames)
-        clip = _preprocess(frames, device)  # (NUM_FRAMES, 3, RES, RES)
-        pending_idx.append(i)
+    for n, start in enumerate(clip_starts):
+        # SoccerNet frames start..start+NUM_FRAMES-1 -> their video-frame indices.
+        sn_frames = range(start, min(start + NUM_FRAMES, T))
+        vidx = [min(round(i / FPS * video_fps), total_frames - 1) for i in sn_frames]
+        # pad a short final clip up to NUM_FRAMES by repeating the last index.
+        while len(vidx) < NUM_FRAMES:
+            vidx.append(vidx[-1])
+
+        frames = _get_frames_at(decoder, vidx)          # (NUM_FRAMES, 3, H, W)
+        clip = _preprocess(frames, device)              # (NUM_FRAMES, 3, RES, RES)
+        pending_starts.append(start)
         pending_clips.append(clip)
         if len(pending_clips) == batch:
             flush()
-        if i % 500 == 0 and i:
-            print(f"      {i}/{T} frames")
+        if n % 20 == 0:
+            print(f"      clip {n}/{len(clip_starts)}")
     flush()
 
     return feats
