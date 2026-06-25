@@ -1,0 +1,10 @@
+project: my-awesome-kernel
+kernel_slug: daniels02/my-awesome-kernel
+code_file: football_jepa.ipynb
+accelerator: none
+internet: false
+privacy: private
+datasets: []
+competitions: []
+outputs:
+  download_to: .kaggle-outputs/

@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Data — large SoccerNet videos & precomputed features (use Kaggle Datasets, not git)
+data/
+
+# Model checkpoints & generated outputs
+results/*.pt
+results/*.png
+.kaggle-outputs/
+
+# Office temp/lock files (the idea/ doc)
+idea/~$*
+idea/~WRL*.tmp
+*.tmp
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.ipynb_checkpoints/
+.vscode/
