@@ -12,7 +12,7 @@ analogous to a CLS token but without needing to be prepended at layer 0.
 
 import torch
 import torch.nn as nn
-from src.dataset import CLIP_LEN, NUM_CLASSES
+from footy.dataset import CLIP_LEN, NUM_CLASSES
 
 
 class AttentiveProbe(nn.Module):

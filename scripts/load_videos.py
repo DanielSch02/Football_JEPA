@@ -23,7 +23,7 @@ google_measurement_protocol.report = lambda *a, **kw: []
 
 from SoccerNet.Downloader import SoccerNetDownloader
 
-from src.config import VJEPA_GAMES, get_nda_password
+from footy.config import VJEPA_GAMES, get_nda_password
 
 # Default local target; on Kaggle pass --data_dir /kaggle/working/soccernet
 DATA_DIR = "./data/soccernet"

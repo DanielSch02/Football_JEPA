@@ -15,11 +15,11 @@ import numpy as np
 import torch
 from scipy.signal import find_peaks
 
-from src.dataset import (
+from footy.dataset import (
     CLIP_LEN, HALF_CLIP, FPS, EVENT_LABELS, NUM_CLASSES,
     LABEL_TO_IDX, FEATURE_DIMS, load_half, _extract_clip,
 )
-from src.probe import AttentiveProbe
+from footy.probe import AttentiveProbe
 
 RESULTS_DIR = Path("results")
 

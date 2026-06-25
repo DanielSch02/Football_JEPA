@@ -17,8 +17,8 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 from sklearn.metrics import confusion_matrix
 
-from src.dataset import SoccerNetClipDataset, EVENT_LABELS, NUM_CLASSES, FEATURE_DIMS
-from src.probe import AttentiveProbe
+from footy.dataset import SoccerNetClipDataset, EVENT_LABELS, NUM_CLASSES, FEATURE_DIMS
+from footy.probe import AttentiveProbe
 
 RESULTS_DIR = Path("results")
 RESULTS_DIR.mkdir(exist_ok=True)
