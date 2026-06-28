@@ -30,7 +30,7 @@ from pathlib import Path
 import numpy as np
 import torch
 
-from footy.config import VJEPA_GAME_PATHS, VJEPA_GAME_PATHS_FULL, default_data_dir
+from footy.config import VJEPA_GAME_PATHS, VJEPA_GAME_PATHS_FULL, default_data_dir, resolve_game_dir
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 FPS = 2                      # SoccerNet feature frame rate (matches src/dataset.py)
@@ -238,7 +238,9 @@ def run(data_dir: str, out_dir: str, batch: int, games: list[str]):
     model = load_encoder(device)
 
     for game in games:
-        game_dir = Path(data_dir) / game
+        # Input videos may be flattened by Kaggle's dataset save -> resolve actual dir.
+        game_dir = resolve_game_dir(data_dir, game)
+        # Output keeps the canonical england_epl/<season>/<game> layout.
         out_game_dir = Path(out_dir) / game
         out_game_dir.mkdir(parents=True, exist_ok=True)
         print(f"\n=== {game} ===")

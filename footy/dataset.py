@@ -95,7 +95,8 @@ def load_half(
         features: float32 array of shape (T, D)
         events:   list of dicts with keys 'frame' and 'label_idx'
     """
-    game_path = Path(data_dir) / game
+    from footy.config import resolve_game_dir
+    game_path = resolve_game_dir(data_dir, game)
     feat_path = game_path / f"{half}_{feature_tag}.npy"
     label_path = game_path / "Labels-v2.json"
 
@@ -182,11 +183,13 @@ class SoccerNetClipDataset(Dataset):
         if games is None:
             games = getListGames(split, task="spotting")
 
+        from footy.config import resolve_game_dir
         missing = 0
         for game in games:
+            game_dir = resolve_game_dir(data_dir, game)
             for half in (1, 2):
-                feat_path = Path(data_dir) / game / f"{half}_{feature_tag}.npy"
-                label_path = Path(data_dir) / game / "Labels-v2.json"
+                feat_path = game_dir / f"{half}_{feature_tag}.npy"
+                label_path = game_dir / "Labels-v2.json"
                 if not feat_path.exists() or not label_path.exists():
                     missing += 1
                     continue

@@ -93,23 +93,57 @@ def default_data_dir() -> str:
     if env:
         return env
 
-    # Auto-detect under /kaggle/input: find any file whose path ends with a known
-    # game-relative path, then strip that suffix to get the data_dir. We probe by
-    # video / features / labels (a dataset may contain any of these) and check all
-    # known games (not just the first), so detection is robust to which dataset is
-    # attached (soccernet-25games videos, vjepa-features-* features, etc.).
+    # Auto-detect under /kaggle/input. Kaggle collapses single-child directory
+    # chains on dataset save, so the england_epl/<season>/ prefix may be missing
+    # (e.g. .../soccernet-25games/2015-2016/<game>/...). We therefore key on the
+    # unique GAME LEAF NAME only, and return the directory that contains the
+    # <season>/<game> (or <game>) subtree. Use resolve_game_dir() to locate a
+    # specific game inside whatever structure exists.
     kaggle_input = Path("/kaggle/input")
     if kaggle_input.exists():
-        candidates = ("1_224p.mkv", "1_VJEPA21_L.npy", "Labels-v2.json")
-        games = VJEPA_GAME_PATHS or VJEPA_GAME_PATHS_FULL
-        for fname in candidates:
+        leaves = {Path(g).name for g in (VJEPA_GAME_PATHS or VJEPA_GAME_PATHS_FULL)}
+        for fname in ("1_224p.mkv", "1_VJEPA21_L.npy", "Labels-v2.json"):
             for found in kaggle_input.rglob(fname):
-                for game in games:
-                    suffix = (Path(game) / fname).parts
-                    if found.parts[-len(suffix):] == suffix:
-                        return str(Path(*found.parts[:-len(suffix)]))
-
+                game_leaf = found.parent.name           # the <game> folder name
+                if game_leaf in leaves:
+                    season = found.parent.parent.name   # e.g. 2015-2016
+                    # data_dir = path up to and including england_epl, if present,
+                    # else the parent of the season folder.
+                    season_parent = found.parent.parent.parent
+                    return str(season_parent)
     return "./data/soccernet"
+
+
+def resolve_game_dir(data_dir: str, game: str) -> Path:
+    """
+    Find the actual directory for a game under data_dir, tolerant of Kaggle's
+    folder flattening. `game` is the canonical 'england_epl/<season>/<name>' path.
+
+    Tries, in order:
+      1. data_dir/england_epl/<season>/<name>   (canonical)
+      2. data_dir/<season>/<name>               (england_epl collapsed)
+      3. data_dir/<name>                         (season collapsed too)
+      4. recursive search for the unique <name> leaf folder.
+    Returns the first existing path; falls back to the canonical join.
+    """
+    root = Path(data_dir)
+    parts = Path(game).parts          # (england_epl, <season>, <name>)
+    name = parts[-1]
+    season = parts[-2] if len(parts) >= 2 else None
+
+    candidates = [root / game]
+    if season:
+        candidates.append(root / season / name)
+    candidates.append(root / name)
+    for c in candidates:
+        if c.exists():
+            return c
+
+    # last resort: find the unique leaf folder anywhere under root
+    for d in root.rglob(name):
+        if d.is_dir():
+            return d
+    return root / game                # canonical fallback (will error informatively downstream)
 
 
 def get_nda_password() -> str:
