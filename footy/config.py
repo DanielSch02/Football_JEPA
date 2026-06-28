@@ -26,6 +26,58 @@ VJEPA_GAMES: list[tuple[str, str]] = [
 VJEPA_GAME_PATHS: list[str] = [g for g, _ in VJEPA_GAMES]
 
 
+# Full baseline set: the exact 20 train + 5 valid games the ResNet baseline used
+# (getListGames('train')[:20] + getListGames('valid')[:5]). Hardcoded so this module
+# imports without a SoccerNet dependency; verify_full_games() asserts it still matches.
+# Used for the fair 25-game V-JEPA-vs-ResNet comparison.
+VJEPA_GAMES_FULL: list[tuple[str, str]] = [
+    # ── train (20) ──
+    ("england_epl/2014-2015/2015-02-21 - 18-00 Chelsea 1 - 1 Burnley",            "train"),
+    ("england_epl/2014-2015/2015-02-21 - 18-00 Crystal Palace 1 - 2 Arsenal",     "train"),
+    ("england_epl/2014-2015/2015-02-21 - 18-00 Swansea 2 - 1 Manchester United",  "train"),
+    ("england_epl/2014-2015/2015-02-22 - 19-15 Southampton 0 - 2 Liverpool",      "train"),
+    ("england_epl/2015-2016/2015-08-08 - 19-30 Chelsea 2 - 2 Swansea",            "train"),
+    ("england_epl/2015-2016/2015-08-29 - 17-00 Chelsea 1 - 2 Crystal Palace",     "train"),
+    ("england_epl/2015-2016/2015-08-29 - 17-00 Manchester City 2 - 0 Watford",    "train"),
+    ("england_epl/2015-2016/2015-09-12 - 14-45 Everton 3 - 1 Chelsea",            "train"),
+    ("england_epl/2015-2016/2015-09-12 - 17-00 Crystal Palace 0 - 1 Manchester City", "train"),
+    ("england_epl/2015-2016/2015-09-19 - 19-30 Manchester City 1 - 2 West Ham",   "train"),
+    ("england_epl/2015-2016/2015-09-26 - 17-00 Liverpool 3 - 2 Aston Villa",      "train"),
+    ("england_epl/2015-2016/2015-10-17 - 17-00 Chelsea 2 - 0 Aston Villa",        "train"),
+    ("england_epl/2015-2016/2015-10-31 - 15-45 Chelsea 1 - 3 Liverpool",          "train"),
+    ("england_epl/2015-2016/2015-11-07 - 18-00 Manchester United 2 - 0 West Brom","train"),
+    ("england_epl/2015-2016/2015-11-21 - 20-30 Manchester City 1 - 4 Liverpool",  "train"),
+    ("england_epl/2015-2016/2015-11-29 - 15-00 Tottenham 0 - 0 Chelsea",          "train"),
+    ("england_epl/2015-2016/2015-12-05 - 20-30 Chelsea 0 - 1 Bournemouth",        "train"),
+    ("england_epl/2015-2016/2015-12-19 - 18-00 Chelsea 3 - 1 Sunderland",         "train"),
+    ("england_epl/2015-2016/2015-12-26 - 18-00 Manchester City 4 - 1 Sunderland", "train"),
+    ("england_epl/2015-2016/2016-01-03 - 16-30 Crystal Palace 0 - 3 Chelsea",     "train"),
+    # ── valid (5) ──
+    ("england_epl/2014-2015/2015-04-11 - 19-30 Burnley 0 - 1 Arsenal",            "valid"),
+    ("england_epl/2015-2016/2015-08-30 - 18-00 Swansea 2 - 1 Manchester United",  "valid"),
+    ("england_epl/2015-2016/2015-09-26 - 17-00 Leicester 2 - 5 Arsenal",          "valid"),
+    ("england_epl/2015-2016/2015-09-26 - 17-00 Manchester United 3 - 0 Sunderland","valid"),
+    ("england_epl/2015-2016/2015-10-03 - 17-00 Manchester City 6 - 1 Newcastle Utd", "valid"),
+]
+
+VJEPA_GAME_PATHS_FULL: list[str] = [g for g, _ in VJEPA_GAMES_FULL]
+
+
+def verify_full_games() -> None:
+    """
+    Assert VJEPA_GAMES_FULL exactly matches the baseline selection from SoccerNet.
+    Raises AssertionError on drift. Requires the SoccerNet package (call when checking).
+    """
+    from SoccerNet.utils import getListGames
+
+    tr = [g.replace("\\", "/") for g in getListGames("train", task="spotting")[:20]]
+    va = [g.replace("\\", "/") for g in getListGames("valid", task="spotting")[:5]]
+    expected = [(g, "train") for g in tr] + [(g, "valid") for g in va]
+    assert VJEPA_GAMES_FULL == expected, (
+        "VJEPA_GAMES_FULL drifted from baseline getListGames selection"
+    )
+
+
 def default_data_dir() -> str:
     """
     Resolve the SoccerNet data directory.
