@@ -93,16 +93,21 @@ def default_data_dir() -> str:
     if env:
         return env
 
-    # Auto-detect under /kaggle/input by locating a Labels-v2.json whose path ends
-    # with the known game-relative path, then strip that suffix to get data_dir.
-    probe = VJEPA_GAME_PATHS[0]                 # e.g. england_epl/2014-2015/<game>
-    suffix = Path(probe) / "Labels-v2.json"
-    n_strip = len(suffix.parts)                 # parts to drop from the matched file path
+    # Auto-detect under /kaggle/input: find any file whose path ends with a known
+    # game-relative path, then strip that suffix to get the data_dir. We probe by
+    # video / features / labels (a dataset may contain any of these) and check all
+    # known games (not just the first), so detection is robust to which dataset is
+    # attached (soccernet-25games videos, vjepa-features-* features, etc.).
     kaggle_input = Path("/kaggle/input")
     if kaggle_input.exists():
-        for labels in kaggle_input.rglob("Labels-v2.json"):
-            if labels.parts[-n_strip:] == suffix.parts:
-                return str(Path(*labels.parts[:-n_strip]))
+        candidates = ("1_224p.mkv", "1_VJEPA21_L.npy", "Labels-v2.json")
+        games = VJEPA_GAME_PATHS or VJEPA_GAME_PATHS_FULL
+        for fname in candidates:
+            for found in kaggle_input.rglob(fname):
+                for game in games:
+                    suffix = (Path(game) / fname).parts
+                    if found.parts[-len(suffix):] == suffix:
+                        return str(Path(*found.parts[:-len(suffix)]))
 
     return "./data/soccernet"
 
