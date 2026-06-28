@@ -183,7 +183,27 @@ def extract_half(model, game_dir: Path, half: int, device: torch.device, batch: 
     if not video_path.exists():
         raise FileNotFoundError(video_path)
 
-    decoder, total_frames, video_fps = _open_decoder(video_path)
+    # Random-access video decode from a network-backed mount (/kaggle/input) is
+    # ~6x slower than from local disk. Copy the .mkv to fast local /tmp first,
+    # decode there, delete after. Skips the copy if already local.
+    import shutil, tempfile, os
+    local_video = video_path
+    tmp_copy = None
+    if str(video_path).startswith("/kaggle/input"):
+        tmp_copy = Path(tempfile.gettempdir()) / f"_extract_{half}_{os.getpid()}.mkv"
+        print(f"    copying video to local {tmp_copy} ...")
+        shutil.copy(video_path, tmp_copy)
+        local_video = tmp_copy
+
+    try:
+        decoder, total_frames, video_fps = _open_decoder(local_video)
+        return _extract_from_decoder(model, game_dir, half, decoder, total_frames, video_fps, device, batch)
+    finally:
+        if tmp_copy is not None and tmp_copy.exists():
+            tmp_copy.unlink()
+
+
+def _extract_from_decoder(model, game_dir, half, decoder, total_frames, video_fps, device, batch):
 
     T = expected_T(game_dir, half)
     if T is None:
