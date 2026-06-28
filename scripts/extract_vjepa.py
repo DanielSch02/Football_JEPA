@@ -30,7 +30,7 @@ from pathlib import Path
 import numpy as np
 import torch
 
-from footy.config import VJEPA_GAME_PATHS, default_data_dir
+from footy.config import VJEPA_GAME_PATHS, VJEPA_GAME_PATHS_FULL, default_data_dir
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 FPS = 2                      # SoccerNet feature frame rate (matches src/dataset.py)
@@ -264,9 +264,16 @@ if __name__ == "__main__":
     parser.add_argument("--batch", type=int, default=8,
                         help="Clip windows per encoder forward pass")
     parser.add_argument("--games", nargs="*", default=None,
-                        help="Game paths (default: footy.config.VJEPA_GAME_PATHS)")
+                        help="Explicit game paths (e.g. a chunk); overrides --full")
+    parser.add_argument("--full", action="store_true",
+                        help="Use the full 25-game baseline set (default: 3-game smoke set)")
     args = parser.parse_args()
 
     out_dir = args.out_dir or args.data_dir
-    games = args.games or VJEPA_GAME_PATHS
+    if args.games:
+        games = args.games
+    elif args.full:
+        games = VJEPA_GAME_PATHS_FULL
+    else:
+        games = VJEPA_GAME_PATHS
     run(args.data_dir, out_dir, args.batch, games)

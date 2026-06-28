@@ -23,21 +23,21 @@ google_measurement_protocol.report = lambda *a, **kw: []
 
 from SoccerNet.Downloader import SoccerNetDownloader
 
-from footy.config import VJEPA_GAMES, get_nda_password
+from footy.config import VJEPA_GAMES, VJEPA_GAMES_FULL, get_nda_password
 
 # Default local target; on Kaggle pass --data_dir /kaggle/working/soccernet
 DATA_DIR = "./data/soccernet"
 VIDEO_FILES = ["Labels-v2.json", "1_224p.mkv", "2_224p.mkv"]
 
 
-def download(data_dir: str = DATA_DIR) -> None:
+def download(data_dir: str = DATA_DIR, games: list[tuple[str, str]] = VJEPA_GAMES) -> None:
     d = SoccerNetDownloader(data_dir)
     d.password = get_nda_password()
 
-    print(f"Downloading {len(VJEPA_GAMES)} games to {data_dir}")
-    for i, (game, split) in enumerate(VJEPA_GAMES, 1):
+    print(f"Downloading {len(games)} games to {data_dir}")
+    for i, (game, split) in enumerate(games, 1):
         game_path = Path(data_dir) / game
-        print(f"[{i}/{len(VJEPA_GAMES)}] [{split}] {game}")
+        print(f"[{i}/{len(games)}] [{split}] {game}")
 
         for fname in VIDEO_FILES:
             if (game_path / fname).exists():
@@ -47,7 +47,7 @@ def download(data_dir: str = DATA_DIR) -> None:
             print(f"    downloaded {fname}")
 
     print("\nDone. Summary:")
-    for game, _ in VJEPA_GAMES:
+    for game, _ in games:
         gp = Path(data_dir) / game
         have = [f for f in VIDEO_FILES if (gp / f).exists()]
         print(f"  {len(have)}/{len(VIDEO_FILES)}  {game}")
@@ -58,5 +58,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--data_dir", default=DATA_DIR)
+    parser.add_argument("--full", action="store_true",
+                        help="Use the full 25-game baseline set (default: 3-game smoke set)")
     args = parser.parse_args()
-    download(args.data_dir)
+    download(args.data_dir, VJEPA_GAMES_FULL if args.full else VJEPA_GAMES)
